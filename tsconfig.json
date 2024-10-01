@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@my-org/*": ["web3-server", "client"]
+    },
+    "baseUrl": "."
+  },
+  "include": ["web3-server", "client"],
+  "references": [
+    {
+      "path": "./web3-server"
+    },
+    {
+      "path": "./client"
+    }
+  ]
+}

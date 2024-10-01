@@ -1,0 +1,16 @@
+{
+  "name": "web3-server",
+  "version": "1.0.0",
+  "author": "Serhii Stepanchuk",
+  "license": "MIT",
+  "main": "main.js",
+  "devDependencies": {
+    "@types/deep-equal-in-any-order": "^1.0.3",
+    "deep-equal-in-any-order": "^2.0.6",
+    "@nomicfoundation/hardhat-toolbox-viem": "^3.0.0",
+    "@types/lodash": "^4.17.9",
+    "hardhat": "^2.22.10",
+    "lodash": "^4.17.21",
+    "viem": "^2.21.16"
+  }
+}
