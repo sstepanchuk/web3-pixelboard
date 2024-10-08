@@ -7,18 +7,18 @@
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "paths": {
-      "@my-org/*": ["web3-server", "client"]
-    },
     "baseUrl": "."
   },
-  "include": ["web3-server", "client"],
+  "include": ["web3-server", "client", "shared"],
   "references": [
     {
       "path": "./web3-server"
     },
     {
       "path": "./client"
+    },
+    {
+      "path": "./shared"
     }
   ]
 }

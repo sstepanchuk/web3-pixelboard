@@ -1,77 +1,203 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-contract Board {
-    struct PixelPoint {
-        uint48 Y;
-        uint48 X;
-        uint24 color;
-    }
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+// Contract for a pixel-based board game where users can own and rent pixels
+contract Board is ERC721, Ownable {
+    uint32 public constant PIXEL_PRICE = 1 gwei;
 
     struct Pixel {
-        PixelPoint point;
-        address owner;
+        uint24 color; // Color of the pixel (24 bits)
+        uint256 rentPricePerSecond; // Rental price per second in wei
+        address renter; // Address of the current renter
+        uint256 rentEndTime; // End time of the rental period
     }
 
-    mapping(uint48 => mapping(uint48 => uint256)) public pixelPositions; // Store index of allPixelPoints
+    mapping(uint96 => Pixel) public pixels;
 
-    // Array to store all pixel coordinates and data for retrieval
-    Pixel[] public pixels;
-
-    // Events
-    event PixelChanged(
-        uint48 indexed Y,
-        uint48 indexed X,
-        address indexed owner,
-        uint24 color
+    event PixelChanged(uint256 indexed tokenId, uint24 color);
+    event PixelRented(
+        uint256 indexed tokenId,
+        address indexed renter,
+        uint256 rentEndTime
     );
 
-    function setPixels(PixelPoint[] calldata inputPixels) external {
-        uint48 len = uint48(inputPixels.length);
+    constructor() ERC721("PixelBoard", "PIXEL") Ownable(msg.sender) {}
 
-        for (uint48 i = 0; i < len; ) {
-            PixelPoint calldata pixel = inputPixels[i];
+    // Modifiers
+    modifier onlyPixelOwner(uint256 tokenId) {
+        require(
+            ownerOf(tokenId) == msg.sender,
+            "Only the pixel owner can perform this action"
+        );
+        _;
+    }
 
-            // Cache the pixel index
-            uint256 pixelIndex = pixelPositions[pixel.Y][pixel.X];
+    modifier isPixelExist(uint256 tokenId) {
+        require(_ownerOf(tokenId) != address(0), "Pixel does not exist");
+        _;
+    }
 
-            // Check if pixel is new or already exists
-            if (pixelIndex == 0) {
-                // New pixel
-                pixels.push(Pixel(pixel, msg.sender));
-                pixelPositions[pixel.Y][pixel.X] = pixels.length; // Use 1-based index for the mapping
+    // Pack (X, Y) coordinates into a single token ID
+    function packCordsToToken(uint48 X, uint48 Y) public pure returns (uint96) {
+        return (uint96(X) << 48) | uint96(Y);
+    }
 
-                emit PixelChanged(pixel.Y, pixel.X, msg.sender, pixel.color);
-            } else {
-                // Existing pixel
-                Pixel storage existingPixel = pixels[pixelIndex - 1];
+    // Unpack a token ID back into (X, Y) coordinates
+    function unpackCordsFromToken(
+        uint96 packed
+    ) public pure returns (uint48 X, uint48 Y) {
+        X = uint48(packed >> 48);
+        Y = uint48(packed);
+    }
 
-                // Only emit event and write to storage if data changes
-                if (
-                    existingPixel.point.color != pixel.color ||
-                    existingPixel.owner != msg.sender
-                ) {
-                    emit PixelChanged(
-                        pixel.Y,
-                        pixel.X,
-                        msg.sender,
-                        pixel.color
-                    );
+    // Mint a new pixel with specified attributes
+    function mintPixel(
+        uint48 X,
+        uint48 Y,
+        uint24 color,
+        uint256 rentPricePerSecond
+    ) external payable {
+        require(msg.value == PIXEL_PRICE, "Incorrect payment amount"); // Enforce static price
+        uint96 tokenId = packCordsToToken(X, Y);
+        require(_ownerOf(tokenId) == address(0), "Pixel already owned");
+        _mint(msg.sender, tokenId);
+        pixels[tokenId] = Pixel(color, rentPricePerSecond, address(0), 0); // Initialize pixel data
+        emit PixelChanged(tokenId, color);
+    }
 
-                    // Update existing pixel data
-                    existingPixel.point.color = pixel.color;
-                    existingPixel.owner = msg.sender;
-                }
-            }
+    // Change the color of a pixel
+    function setPixelColor(
+        uint96 tokenId,
+        uint24 color
+    ) external isPixelExist(tokenId) {
+        Pixel storage pixel = pixels[tokenId];
+        require(
+            (block.timestamp < pixel.rentEndTime &&
+                pixel.renter == msg.sender) || ownerOf(tokenId) == msg.sender,
+            "Not authorized to change color"
+        );
 
-            unchecked {
-                ++i;
-            } // No need for overflow checks
+        pixel.color = color;
+        emit PixelChanged(tokenId, color);
+    }
+
+    // Update the rent price per second for a pixel
+    function setPixelRentPricePerSecond(
+        uint96 tokenId,
+        uint256 newRentPricePerSecond
+    ) external onlyPixelOwner(tokenId) isPixelExist(tokenId) {
+        pixels[tokenId].rentPricePerSecond = newRentPricePerSecond; // Update the rent price
+    }
+
+    // Rent a pixel for a specified period
+    function rentPixel(
+        uint96 tokenId,
+        uint256 rentTime
+    ) external payable isPixelExist(tokenId) {
+        Pixel storage pixel = pixels[tokenId];
+        address pixelOwner = ownerOf(tokenId);
+        require(pixelOwner != msg.sender, "Owner cannot rent");
+        require(pixel.rentPricePerSecond > 0, "Pixel not for rent");
+        require(block.timestamp > pixel.rentEndTime, "Pixel currently rented");
+        require(rentTime > 0, "Invalid rent end time");
+
+        uint256 totalRentalCost = rentTime * pixel.rentPricePerSecond;
+        require(msg.value >= totalRentalCost, "Insufficient payment");
+
+        // Send rent payment to the pixel owner
+        (bool success, ) = pixelOwner.call{value: totalRentalCost}("");
+        require(success, "Payment to owner failed");
+
+        pixel.rentEndTime = block.timestamp + rentTime;
+        pixel.renter = msg.sender;
+        emit PixelRented(tokenId, msg.sender, pixel.rentEndTime);
+
+        // Refund any excess payment
+        if (msg.value > totalRentalCost) {
+            (success, ) = msg.sender.call{value: msg.value - totalRentalCost}(
+                ""
+            );
+            require(success, "Refund failed");
         }
     }
 
-    // View function to return all pixels
-    function getAllPixels() external view returns (Pixel[] memory) {
-        return pixels; // Return the array of all pixel points
+    // View function to retrieve multiple pixel data in one call
+    function getPixelsData(
+        uint96[] calldata tokenIds
+    ) external view returns (uint24[] memory) {
+        uint256 length = tokenIds.length;
+        uint24[] memory pixelData = new uint24[](length);
+
+        assembly {
+            // Memory pointer to pixelData array
+            let pixelDataPtr := add(pixelData, 0x20)
+
+            // Calldata offset for tokenIds array (pre-calculated once for efficiency)
+            let tokenIdsOffset := add(tokenIds.offset, 0x20)
+
+            // Predefine variables to avoid recalculations
+            let tokenId
+            let storageSlot
+            let color
+
+            // Loop in steps of two for unrolling and gas efficiency
+            for {
+                let i := 0
+            } lt(i, length) {
+                i := add(i, 2)
+            } {
+                // First tokenId load from calldata
+                tokenId := calldataload(add(tokenIdsOffset, mul(i, 0x20)))
+
+                // Compute first tokenId's storage slot (keccak256)
+                mstore(0x00, tokenId)
+                mstore(0x20, 0x00)
+                storageSlot := keccak256(0x00, 0x40)
+
+                // Load first pixel color and mask to 24 bits
+                color := and(sload(storageSlot), 0xFFFFFF)
+
+                // Store the first color directly into memory
+                mstore(pixelDataPtr, color)
+
+                // Increment the memory pointer to the next slot
+                pixelDataPtr := add(pixelDataPtr, 0x20)
+
+                // Check if there's a second tokenId to unroll
+                if lt(add(i, 1), length) {
+                    // Second tokenId load from calldata
+                    tokenId := calldataload(
+                        add(tokenIdsOffset, mul(add(i, 1), 0x20))
+                    )
+
+                    // Compute second tokenId's storage slot (keccak256)
+                    mstore(0x00, tokenId)
+                    mstore(0x20, 0x00)
+                    storageSlot := keccak256(0x00, 0x40)
+
+                    // Load second pixel color and mask to 24 bits
+                    color := and(sload(storageSlot), 0xFFFFFF)
+
+                    // Store the second color directly into memory
+                    mstore(pixelDataPtr, color)
+
+                    // Increment the memory pointer for the second pixel
+                    pixelDataPtr := add(pixelDataPtr, 0x20)
+                }
+            }
+        }
+
+        return pixelData;
+    }
+
+    // Withdraw contract balance (only owner can withdraw)
+    function withdraw() external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No balance to withdraw");
+        (bool success, ) = msg.sender.call{value: balance}("");
+        require(success, "Withdrawal failed");
     }
 }

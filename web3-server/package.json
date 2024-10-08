@@ -5,12 +5,16 @@
   "license": "MIT",
   "main": "main.js",
   "devDependencies": {
-    "@types/deep-equal-in-any-order": "^1.0.3",
-    "deep-equal-in-any-order": "^2.0.6",
     "@nomicfoundation/hardhat-toolbox-viem": "^3.0.0",
+    "@openzeppelin/contracts": "^5.0.2",
+    "@types/deep-equal-in-any-order": "^1.0.3",
     "@types/lodash": "^4.17.9",
+    "deep-equal-in-any-order": "^2.0.6",
     "hardhat": "^2.22.10",
     "lodash": "^4.17.21",
-    "viem": "^2.21.16"
+    "viem": "^2.21.19"
+  },
+  "overrides": {
+    "viem": "$viem"
   }
 }

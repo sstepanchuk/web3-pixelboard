@@ -6,15 +6,13 @@
   "license": "MIT",
   "workspaces": [
     "client",
-    "web3-server"
+    "web3-server",
+    "shared"
   ],
   "devDependencies": {
     "typescript": "^5.6.2"
   },
   "engines": {
     "node": "^20.17.0"
-  },
-  "overrides": {
-    "viem": "$viem"
   }
 }

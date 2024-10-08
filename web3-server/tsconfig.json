@@ -1,6 +1,9 @@
 {
-  "extends": "../tsconfig.json", 
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "composite": true
+    "composite": true,
+    "paths": {
+      "@my-org/*": ["../shared"]
+    }
   }
 }
