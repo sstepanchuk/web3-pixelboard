@@ -3,6 +3,15 @@ export function packCordsToToken(X: number, Y: number): bigint {
     return (BigInt(X) << 48n) + BigInt(Y);
 }
 
+export function unpackTokenToCords(token: bigint): { X: number; Y: number } {
+    // Using bitwise operations directly on BigInt to extract Y and X
+    const Y = token & 0xFFFFFFFFFFFFn; // Extract lower 48 bits directly
+    const X = token >> 48n; // Extract upper bits
+
+    // Cast to number only when returning, this minimizes the conversion overhead
+    return { X: Number(X), Y: Number(Y) };
+}
+
 export function createTokensForRange(xStart: number, xEnd: number, yStart: number, yEnd: number): bigint[] {
     const rangeX = xEnd - xStart + 1;
     const rangeY = yEnd - yStart + 1;

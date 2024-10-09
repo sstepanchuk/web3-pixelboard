@@ -64,7 +64,7 @@ contract Board is ERC721, Ownable {
         uint96 tokenId = packCordsToToken(X, Y);
         require(_ownerOf(tokenId) == address(0), "Pixel already owned");
         _mint(msg.sender, tokenId);
-        pixels[tokenId] = Pixel(color, rentPricePerSecond, address(0), 0); // Initialize pixel data
+        pixels[tokenId] = Pixel(color, rentPricePerSecond, address(0), 0); // Initialize pixel dataz
         emit PixelChanged(tokenId, color);
     }
 
@@ -132,61 +132,31 @@ contract Board is ERC721, Ownable {
         uint24[] memory pixelData = new uint24[](length);
 
         assembly {
-            // Memory pointer to pixelData array
+            // Memory pointer to pixelData array (skipping the length part of the array)
             let pixelDataPtr := add(pixelData, 0x20)
 
-            // Calldata offset for tokenIds array (pre-calculated once for efficiency)
-            let tokenIdsOffset := add(tokenIds.offset, 0x20)
-
-            // Predefine variables to avoid recalculations
-            let tokenId
-            let storageSlot
-            let color
-
-            // Loop in steps of two for unrolling and gas efficiency
+            // Loop over tokenIds array
             for {
                 let i := 0
             } lt(i, length) {
-                i := add(i, 2)
+                i := add(i, 1)
             } {
-                // First tokenId load from calldata
-                tokenId := calldataload(add(tokenIdsOffset, mul(i, 0x20)))
+                // Load the tokenId from calldata
+                let tokenId := calldataload(add(tokenIds.offset, mul(i, 0x20)))
 
-                // Compute first tokenId's storage slot (keccak256)
+                // Compute the storage slot for the tokenId using keccak256
                 mstore(0x00, tokenId)
-                mstore(0x20, 0x00)
-                storageSlot := keccak256(0x00, 0x40)
+                mstore(0x20, pixels.slot)
+                let storageSlot := keccak256(0x00, 0x40)
 
-                // Load first pixel color and mask to 24 bits
-                color := and(sload(storageSlot), 0xFFFFFF)
+                // Load the pixel color and mask it to 24 bits (as uint24)
+                let color := and(sload(storageSlot), 0xFFFFFF)
 
-                // Store the first color directly into memory
+                // Store the color directly into pixelData array
                 mstore(pixelDataPtr, color)
 
-                // Increment the memory pointer to the next slot
+                // Move the pointer to the next slot in the pixelData array
                 pixelDataPtr := add(pixelDataPtr, 0x20)
-
-                // Check if there's a second tokenId to unroll
-                if lt(add(i, 1), length) {
-                    // Second tokenId load from calldata
-                    tokenId := calldataload(
-                        add(tokenIdsOffset, mul(add(i, 1), 0x20))
-                    )
-
-                    // Compute second tokenId's storage slot (keccak256)
-                    mstore(0x00, tokenId)
-                    mstore(0x20, 0x00)
-                    storageSlot := keccak256(0x00, 0x40)
-
-                    // Load second pixel color and mask to 24 bits
-                    color := and(sload(storageSlot), 0xFFFFFF)
-
-                    // Store the second color directly into memory
-                    mstore(pixelDataPtr, color)
-
-                    // Increment the memory pointer for the second pixel
-                    pixelDataPtr := add(pixelDataPtr, 0x20)
-                }
             }
         }
 

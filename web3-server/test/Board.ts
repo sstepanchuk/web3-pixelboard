@@ -3,7 +3,7 @@ import chai from "chai";
 import hre from "hardhat";
 import { getAddress, Hex, parseGwei, parseEventLogs } from "viem";
 import deepEqualInAnyOrder from "deep-equal-in-any-order";
-import { createTokensForRange, packCordsToToken } from "../../shared";
+import { createTokensForRange, packCordsToToken, unpackTokenToCords } from "../../shared";
 
 chai.use(deepEqualInAnyOrder);
 const expect = chai.expect;
@@ -260,7 +260,7 @@ describe("Board Contract Tests", async function () {
       const pixels: PixelData[] = [
         { X: 1, Y: 2, color: 0xFF0000 },
         { X: 1, Y: 3, color: 0x00FF00 },
-        { X: 2, Y: 200, color: 0x0000FF },
+        { X: 2, Y: 50, color: 0x0000FF },
       ];
 
       // Mint multiple pixels
@@ -270,11 +270,12 @@ describe("Board Contract Tests", async function () {
 
       const tokens = createTokensForRange(0, 102, 0, 102);
 
-      const pixelsOut = await board.read.getPixelsData([tokens]);
+      const pixelsOut = (await board.read.getPixelsData([tokens])).map((data, i) => ({ ...unpackTokenToCords(tokens[i]), color: data }));
 
-      //console.log(JSON.stringify(pixelsOut, null, '   '));
-
-      // Further assertions on pixel data can be added here
+      for (const pixel of pixelsOut) {
+        const pixelColor = pixels.find(p => p.X === pixel.X && p.Y === pixel.Y)?.color ?? 0;
+        expect(pixel.color).to.eq(pixelColor);
+      }
     });
 
     it("Handle retrieval of pixel data for non-existent tokens gracefully", async function () {
